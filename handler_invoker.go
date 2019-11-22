@@ -1,7 +1,9 @@
 package goesty
 
 import (
+	"context"
 	"errors"
+	"reflect"
 )
 
 // This is the comment tag that carries parameters for open API generation.
@@ -10,7 +12,9 @@ const (
 )
 
 var (
-	ErrUnknownSignature     = errors.New("unknown fucntion signature")
+	// ErrUnknownSignature ...
+	ErrUnknownSignature     = errors.New("unknown function signature")
+	// ErrUnsupportedParamType ...
 	ErrUnsupportedParamType = errors.New("unsupported param type")
 )
 
@@ -27,20 +31,68 @@ type HandlerInvoker interface {
 	Invoke(v interface{}) (Values, Values, bool)
 }
 
+// HandlerInvokerFunc is an adpater to allow original function as invoker
+type HandlerInvokerFunc func(v interface{}) (Values, Values, bool)
+
+// Invoke calls f(w, r).
+func (f HandlerInvokerFunc) Invoke(v interface{}) (Values, Values, bool) {
+	return f(v)
+}
+
 // HandlerInvokers slice of vkers
 type HandlerInvokers []HandlerInvoker
 
-func (ivks HandlerInvokers) Invoke(v interface{}) (Values, Values, error) {
-	for _, iv := ivks {
+// Invoke ...
+func (ivks HandlerInvokers) Invoke(v interface{}) (Values, Values, bool) {
+	for _, iv := range ivks {
 		ins, ous, ok := iv.Invoke(v)
 		if ok {
-			return ins, ous, nil
+			return ins, ous, ok
 		}
 	}
-	return nil, nil, ErrUnknownSignature
+	return nil, nil, false // ErrUnknownSignature
 }
 
 // --------------------- Invoker ----------------- //
+// TODO: auto from struct take method out with name's
+
+// BaseHandlerInvoker v: (args ...) (obj, error) | (obj) | (error)
+func BaseHandlerInvoker(v interface{}) (Values, Values, bool) {
+	
+	handlerTyp := reflect.TypeOf(v)
+	// handlerVal := reflect.ValueOf(v)
+
+	// must be a func
+	if handlerTyp.Kind() != reflect.Func {
+		return nil, nil, false
+	}
+
+	// get all args
+	largs := handlerTyp.NumIn()
+	lrets := handlerTyp.NumOut()
+
+	var ins = Values{}
+	var ous = Values{}
+
+	for i := 0; i < largs; i++ {
+		var ou, _ = buildValueCreator(handlerTyp.In(i), 0)
+		ins = append(ins, ou)
+	}
+
+	for i := 0; i <lrets; i++ {
+		var ou, _ = buildValueCreator(handlerTyp.Out(i), 0)
+		ous = append(ous, ou)
+	}
+	
+
+	return ins, ous, true
+}
+
+// ContextHandlerInvoker v: (contex.Context, args ...) (obj, error) | (obj) | (error)
+func ContextHandlerInvoker(v interface{}) (Values, Values, bool) {
+
+	return nil, nil, false
+}
 
 /**
 ptr 取完地址再处理,并返回回调函数
@@ -53,15 +105,13 @@ context.Context 为特殊类型值(r.Context()),不应进入本处理逻辑
 */
 
 // buildValueCreator build value creator from request
-func buildValueCreator(typ reflect.Type, depth int) (Value, error) {
+// defualt set value from
+func buildValueCreator(typ reflect.Type, depth int) (*Value, error) {
 
 	// we can take correct value from typ
 	if typ == reflect.TypeOf((*context.Context)(nil)).Elem() {
 		// context.Context we just return. should we check the depth?
-		return newValue(typ, func(w http.ResponseWriter, r *http.Request) interface{} {
-			// TODO: we should set request and response writer
-			return r.Context()
-		})
+		return newValue(typ), nil
 	}
 
 	switch typ.Kind() {
@@ -75,15 +125,11 @@ func buildValueCreator(typ reflect.Type, depth int) (Value, error) {
 		// so it's a little difficate to disting where we should take value from
 		if depth == 0 {
 			// TODO:
-			return newValue(typ, func(w http.ResponseWriter, r *http.Request) interface{} {
-				// 
-			})
+			return newValue(typ), nil
 		}
 
 		// parse tag from field, TODO: use object from tag in x
-		return newValue(typ, func(w http.ResponseWriter, r *http.Request) interface{} {
-
-		})
+		return newValue(typ), nil
 	case reflect.Ptr:
 		// take elem type
 
@@ -96,7 +142,6 @@ func buildValueCreator(typ reflect.Type, depth int) (Value, error) {
 		// else in `querys | paths | headers`
 	case reflect.Array:
 		// if depth == 0 unsupported
-	default:
-		return nil, ErrUnsupportedParamType
 	}
+	return newValue(typ), ErrUnsupportedParamType
 }

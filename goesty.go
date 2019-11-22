@@ -1,9 +1,5 @@
 package goesty
 
-import (
-	"net/http"
-)
-
 var (
 	defualtRuntime *Runtime
 )
@@ -20,11 +16,11 @@ func NewRuntime(opts ...Option) *Runtime {
 }
 
 // New export from default runtime
-func New(v interface{}, opts ...Option) (http.Hanlder, error) {
+func New(v interface{}, opts ...Option) (*Handler, error) {
 	return defualtRuntime.New(v, opts...)
 }
 
 // MustNew export from default runtime
-func MustNew(v interface{}, opts ...Option) http.Handler {
+func MustNew(v interface{}, opts ...Option) *Handler {
 	return defualtRuntime.MustNew(v, opts...)
 }
