@@ -13,7 +13,7 @@ const (
 
 var (
 	// ErrUnknownSignature ...
-	ErrUnknownSignature     = errors.New("unknown function signature")
+	ErrUnknownSignature = errors.New("unknown function signature")
 	// ErrUnsupportedParamType ...
 	ErrUnsupportedParamType = errors.New("unsupported param type")
 )
@@ -58,7 +58,7 @@ func (ivks HandlerInvokers) Invoke(v interface{}) (Values, Values, bool) {
 
 // BaseHandlerInvoker v: (args ...) (obj, error) | (obj) | (error)
 func BaseHandlerInvoker(v interface{}) (Values, Values, bool) {
-	
+
 	handlerTyp := reflect.TypeOf(v)
 	// handlerVal := reflect.ValueOf(v)
 
@@ -79,11 +79,10 @@ func BaseHandlerInvoker(v interface{}) (Values, Values, bool) {
 		ins = append(ins, ou)
 	}
 
-	for i := 0; i <lrets; i++ {
+	for i := 0; i < lrets; i++ {
 		var ou, _ = buildValueCreator(handlerTyp.Out(i), 0)
 		ous = append(ous, ou)
 	}
-	
 
 	return ins, ous, true
 }

@@ -14,7 +14,7 @@ import (
 // }
 func newHandler(v interface{}, r *Runtime) (*Handler, error) {
 	// 1. parse type of v
-	//	1. must should be function (TODO: or struct)
+	//	1. must should be function (TODO: or struct for model CRUD?)
 	// 	2. take params and returns out
 	// 2. init request init function
 	// 3. init response init function
@@ -28,11 +28,14 @@ func newHandler(v interface{}, r *Runtime) (*Handler, error) {
 	// TODO:
 
 	return &Handler{
-		r:   r,
-		m:   reflect.ValueOf(v),
-		ins: ins,
-		ous: ous,
+		r:      r,
+		m:      reflect.ValueOf(v),
+		ins:    ins,
+		ous:    ous,
+		params: make([]*Parameter, len(ins)),
 	}, nil
+
+	// auto add params
 }
 
 // Handler present wraped request and response
@@ -49,92 +52,54 @@ type Handler struct {
 	// this handler supported http methods
 	methods []string
 	// params we need to handler
-	params []Parameter
-
-	// init data to handler
-	_paramIndex       int
-	_paramKey         string
-	_paramIndexOpened bool
-	_paramKeyOpened   bool
-	_paramCalled      int
+	params []*Parameter
 
 	// TODO: copy options from runtime
+
+	// parse struct be here
 }
 
-// Param to set in position
-func (h *Handler) Param(index int) *Handler {
-	// check if the runtime has just called but not set
-	if h._paramIndexOpened {
-		panic("Param method need be closed by InBody/InPath... method")
-	}
-	// temp store
-	h._paramIndex = index
-	h._paramIndexOpened = true
-	return h
-}
-
-// Key to set in struct
-func (h *Handler) Key(key string) *Handler {
-	// check if the runtime has just called but not set
-	if h._paramKeyOpened {
-		panic("Key method need be closed by InBody/InPath... method")
-	}
-	// temp store
-	h._paramKey = key
-	h._paramKeyOpened = true
-
-	return h
+// Param ... reutrn Param to be set
+func (h *Handler) Param(name string) *Parameter {
+	return NewParam(h).Name(name)
 }
 
 // InPath take value from path
 // TODO: maybe we need to use mux or something else
-func (h *Handler) InPath(name string) *Handler {
-	h.SetParam(PathExtrator(name), name)
-	return h
+func (h *Handler) InPath(name string) *Parameter {
+	return h.Param(name).In(InPath)
 }
 
 // InQuery take value from query
-func (h *Handler) InQuery(name string) *Handler {
-	// set value from request's query
-	h.SetParam(QueryExtrator(name), name)
-	return h
+func (h *Handler) InQuery(name string) *Parameter {
+	return h.Param(name).In(InQuery)
 }
 
 // InHeader take value from header
-func (h *Handler) InHeader(name string) *Handler {
-	h.SetParam(HeaderExtrator(name), name)
-	return h
+func (h *Handler) InHeader(name string) *Parameter {
+	return h.Param(name).In(InHeader)
 }
 
 // InCookie take value from cookie
-func (h *Handler) InCookie(name string) *Handler {
-	h.SetParam(CookieExtrator(name), name)
-	return h
+func (h *Handler) InCookie(name string) *Parameter {
+	return h.Param(name).In(InCookie)
 }
 
 // InForm take value from form
-func (h *Handler) InForm(name string) *Handler {
-	h.SetParam(FormExtrator(name), name)
-	return h
+func (h *Handler) InForm(name string) *Parameter {
+	return h.Param(name).In(InForm)
 }
 
 // SetParam set param
-func (h *Handler) SetParam(extrator ParameterExtrator, key string) {
+func (h *Handler) SetParam(idx int, p *Parameter) {
 	// if param has opened
-	var idx int
-	if h._paramIndexOpened {
-		idx = h._paramIndex
-	} else {
-		// try to guess the position
-		idx = h._paramCalled
-		// increase
-		h._paramCalled++
-	}
 
 	// we need to check if the index overflow
 	if idx >= len(h.ins) {
 		panic(fmt.Sprintf("Param position(%d) overflow", idx))
 	}
+
+	p.h.params[idx] = p
 
 	// set inputs' value from function
 	// take the value out check the value's type
@@ -155,17 +120,17 @@ func (h *Handler) SetParam(extrator ParameterExtrator, key string) {
 	// TODO: split to different functions
 	valwrap.addValueFromRequest(func(v *Value, r *Request) {
 		// take string out from extrate parameter
-		var valstr, _ = extrator(r, key)
-		v.setString(valstr) // TODO: handle with error error
+		var valstr, _ = p.ext(r, p.name)
+		// default value
+		if valstr == "" {
+			v.setValue(p.defval)
+		} else {
+			v.setString(valstr) // TODO: handle with error error
+		}
 	})
 
 	// TODO: input is complex
 
-	// set value to
-
-	// reset all flags
-	h._paramIndexOpened = false
-	h._paramKeyOpened = false
 }
 
 // ServeHTTP implement from net/http Handler
@@ -196,6 +161,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// set rets to outs
 	// TODO: finish those code
 	h.ous.IntoResponse(mw, rets)
+
 	mw.Flush()
 }
 

@@ -18,7 +18,10 @@ Go making RESTful easy.
 
 Goesty is an little library to build RESTful HTTP API simply.
 
-## Feature
+## Features
+
+- Generate before building
+- Reflect at runtime
 
 ## Getting Start
 
